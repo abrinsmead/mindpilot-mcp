@@ -6,19 +6,20 @@
   },
   "description": "See through your agent's eyes. Visualize legacy code, architect new systems, understand everything.",
   "type": "module",
-  "main": "dist/server/server.js",
+  "main": "dist/mcp/server.js",
   "files": [
     "dist/"
   ],
   "bin": {
-    "mindpilot-mcp": "dist/server/server.js"
+    "mindpilot-mcp": "dist/mcp/server.js"
   },
   "scripts": {
     "build": "npm run build:client && npm run build:server",
     "build:client": "cd src/client && npm run build",
     "build:server": "tsc",
-    "dev": "NODE_ENV=development concurrently \"tsx src/server/server.ts\" \"cd src/client && npm run dev\"",
-    "start": "NODE_ENV=production node dist/server/server.js",
+    "dev": "NODE_ENV=development concurrently \"tsx src/http/server.ts\" \"cd src/client && npm run dev\"",
+    "start": "NODE_ENV=production node dist/http/server.js",
+    "start:mcp": "NODE_ENV=production node dist/mcp/server.js",
     "prepare": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -41,6 +42,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.1.2",
     "tsx": "^4.6.0",
     "typescript": "^5.3.0"

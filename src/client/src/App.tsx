@@ -80,9 +80,9 @@ function App() {
     url: wsUrl,
     onMessage: (data) => {
       console.log('[WebSocket Message]', data);
-      if (data.type === "render_result" && data.success && data.output) {
+      if (data.type === "render_result" && data.diagram) {
         console.log("Updating diagram from WebSocket broadcast");
-        setDiagram(data.output);
+        setDiagram(data.diagram);
         setStatus("Rendered successfully (via broadcast)");
 
         // Reset view to fit new diagram
