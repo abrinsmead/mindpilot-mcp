@@ -3,6 +3,8 @@
 [![NPM Version](https://img.shields.io/npm/v/@mindpilot/mcp)](https://www.npmjs.com/package/@mindpilot/mcp)
 [![GitHub License](https://img.shields.io/github/license/abrinsmead/mindpilot-mcp)](https://github.com/abrinsmead/mindpilot-mcp/blob/main/LICENSE)
 
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/abrinsmead/mindpilot-mcp)](https://archestra.ai/mcp-catalog/abrinsmead__mindpilot-mcp)
+
 See through your agent's eyes. Visualize legacy code, inspect complex flows, understand everything.
 
 ![Screenshot](https://raw.githubusercontent.com/abrinsmead/mindpilot-mcp/main/mindpilot-mcp-latest.png)
