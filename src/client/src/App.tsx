@@ -8,6 +8,7 @@ import { DiagramRenderer, PanZoomContainer, DiagramTitle, MermaidEditor, Mermaid
 import { useLocalStorageBoolean, useLocalStorageNumber } from "@/hooks/useLocalStorage";
 import { useKeyboardShortcuts, usePreventBrowserZoom, KeyboardShortcut } from "@/hooks/useKeyboardShortcuts";
 import { usePanZoom } from "@/hooks/usePanZoom";
+import { useKeyboardPanning } from "@/hooks/useKeyboardPanning";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useFeatureFlag } from "@/hooks/useQueryParam";
 import { useExportDiagram } from "@/hooks";
@@ -52,6 +53,7 @@ export function App() {
     handleZoomIn,
     handleZoomOut,
     handleFitToScreen,
+    handleKeyPan,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
@@ -59,9 +61,13 @@ export function App() {
     setHasManuallyZoomed,
   } = usePanZoom(containerRef, previewRef);
 
-
-
-
+  // Use smooth keyboard panning
+  useKeyboardPanning(handleKeyPan, {
+    isEnabled: !isEditorFocused && !isRenaming,
+    panSpeed: 8,
+    accelerationFactor: 1.05,
+    maxSpeed: 25
+  });
 
   // Shared state for forcing history refresh
   const [historyRefreshTrigger] = useState(0);
@@ -324,21 +330,22 @@ export function App() {
         isEnabled: () => !isEditorFocused && !isRenaming && !!diagram,
         handler: () => handleCopySource()
       },
-      // Zoom controls
+      // Zoom controls (using PageUp/PageDown)
       {
-        key: 'ArrowUp',
+        key: 'PageUp',
         description: 'Zoom in',
         ignoreInputElements: true,
         isEnabled: () => !isEditorFocused && !isRenaming,
         handler: () => handleZoomIn()
       },
       {
-        key: 'ArrowDown',
+        key: 'PageDown',
         description: 'Zoom out',
         ignoreInputElements: true,
         isEnabled: () => !isEditorFocused && !isRenaming,
         handler: () => handleZoomOut()
       },
+      // Pan controls are now handled by useKeyboardPanning hook for smooth movement
       {
         key: 'f',
         description: 'Fit to screen',
@@ -354,7 +361,7 @@ export function App() {
         isEnabled: () => !isEditorFocused && !isRenaming,
         handler: () => setIsDrawingMode(!isDrawingMode)
       }] : []),
-      // Navigation
+      // Navigation (Ctrl/Cmd + ArrowLeft/ArrowRight)
       {
         key: 'ArrowLeft',
         ctrl: true,
