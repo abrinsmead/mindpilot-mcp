@@ -120,7 +120,7 @@ export class MindpilotMCPClient {
         {
           name: "render_mermaid",
           description:
-            'Render a Mermaid diagram to SVG format. CRITICAL RULES: 1) Node IDs must be alphanumeric without spaces (use A1, nodeA, start_node). 2) For node labels with special characters, wrap in quotes: A["Label with spaces"] or A["Process (step 1)"]. 3) For quotes in labels use &quot;, for < use &lt;, for > use &gt;. 4) For square brackets in labels use A["Array&#91;0&#93;"]. 5) Always close all brackets and quotes. 6) Use consistent arrow styles (either --> or ->). Example: graph TD\\n  A["Complex Label"] --> B{Decision?}\\n  B -->|Yes| C["Result &quot;OK&quot;"]\\n\\nIMPORTANT: If the diagram fails validation, the error message will explain what needs to be fixed. Please read the error carefully and retry with a corrected diagram.',
+            'Render a Mermaid diagram to SVG format. CRITICAL RULES: 1) Node IDs must be alphanumeric without spaces (use A1, nodeA, start_node). 2) For node labels with special characters, wrap in quotes: A["Label with spaces"] or A["Process (step 1)"]. 3) For quotes in labels use &quot;, for < use &lt;, for > use &gt;. 4) For square brackets in labels use A["Array&#91;0&#93;"]. 5) Always close all brackets and quotes. 6) Use consistent arrow styles (either --> or ->). 7) Avoid starting node labels with numbers (e.g., "3. Step") as they may be interpreted as markdown lists - use Roman numerals instead (e.g., "III. Step"). Example: graph TD\\n  A["Complex Label"] --> B{Decision?}\\n  B -->|Yes| C["Result &quot;OK&quot;"]\\n\\nIMPORTANT: If the diagram fails validation, the error message will explain what needs to be fixed. Please read the error carefully and retry with a corrected diagram.',
           inputSchema: {
             type: "object",
             properties: {
@@ -249,10 +249,7 @@ export class MindpilotMCPClient {
     // Start the HTTP server as a separate process
     const args = [httpServerPath, '--port', this.httpPort.toString()];
 
-    // Pass debug flag to server if enabled
-    if (isDebugMode) {
-      args.push("--debug");
-    }
+    // Debug mode is communicated via MINDPILOT_DEBUG env; no CLI flag needed
 
     // Pass disable-analytics flag to server if enabled
     if (this.disableAnalytics) {
@@ -265,7 +262,9 @@ export class MindpilotMCPClient {
       args.push(this.dataPath);
     }
 
-    const serverProcess = spawn("node", args, {
+    // Use the same Node executable that launched this process to
+    // avoid PATH issues inside MCP hosts or GUI environments.
+    const serverProcess = spawn(process.execPath, args, {
       detached: true,
       stdio: "ignore",
       env: {

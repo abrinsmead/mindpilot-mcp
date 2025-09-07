@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import fs from "fs/promises";
 import open from "open";
 import { setMaxListeners } from "events";
+import net from "net";
 import { httpLogger as logger } from "../shared/logger.js";
 import {
   RenderResult,
@@ -370,12 +371,26 @@ export class SingletonHTTPServer {
 
 // Helper function to check if a server is already running on a port
 export async function isPortInUse(port: number, signal?: AbortSignal): Promise<boolean> {
-  try {
-    const response = await fetch(`http://localhost:${port}/api/status`, { signal });
-    return response.ok;
-  } catch {
-    return false;
-  }
+  // Fast TCP connect check with short timeout to avoid fetch hangs and
+  // IPv6/IPv4 localhost resolution issues.
+  return await new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ port, host: "127.0.0.1" });
+
+    const done = (result: boolean) => {
+      socket.removeAllListeners();
+      try { socket.destroy(); } catch {}
+      resolve(result);
+    };
+
+    if (signal) {
+      if (signal.aborted) return done(false);
+      signal.addEventListener("abort", () => done(false), { once: true });
+    }
+
+    socket.setTimeout(500, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
 }
 
 // Start server if run directly

@@ -17,7 +17,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       // Change this port if running the backend on a different port
-      '/api': 'http://localhost:4000',
+      '/api': `http://localhost:${process.env.MINDPILOT_API_PORT || process.env.VITE_API_PORT || 4000}`,
     },
   },
 })

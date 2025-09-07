@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 0.6.0
+- Enhanced navigation system with smooth, intuitive controls ([see visualizations](docs/visualizations/navigation-features.md))
+  - Mouse wheel now pans by default (matching user expectations)
+  - Shift+wheel for horizontal panning
+  - Ctrl/Cmd+wheel for zooming
+- Implement smooth keyboard panning with arrow keys
+  - Continuous movement with acceleration (1.05x up to 25px/frame)
+  - 8-way diagonal movement support (hold multiple arrow keys)
+  - Proper velocity normalization for consistent diagonal speed
+- Remap zoom controls to PageUp/PageDown keys
+- Add new `useKeyboardPanning` hook for advanced keyboard navigation
+- Refactor and improve test coverage (27 tests passing)
+- Fix TypeScript build errors in test files
+
 ## 0.5.0
 - Add right-click context menu for diagram panel with copy and export options
 - Add keyboard shortcuts 'i' and 's' for quick copy image and copy source operations

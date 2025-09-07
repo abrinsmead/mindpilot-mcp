@@ -26,6 +26,7 @@ export interface PanZoomHandlers {
   handleZoomOut: () => void;
   handleZoomReset: () => void;
   handleFitToScreen: (isAutoResize?: boolean) => void;
+  handleKeyPan: (dx: number, dy: number) => void;
   handleMouseDown: (e: MouseEvent) => void;
   handleMouseMove: (e: MouseEvent) => void;
   handleMouseUp: () => void;
@@ -145,54 +146,83 @@ export function usePanZoom(
     setIsPanning(false);
   }, []);
 
-  // Wheel handler for zoom
+  // Keyboard-based panning handler (dx, dy in pixels)
+  const handleKeyPan = useCallback((dx: number, dy: number) => {
+    if (!opts.enablePan) return;
+    setPan((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+  }, [opts.enablePan]);
+
+  // Wheel handler for zoom and pan
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !opts.enableZoom) return;
+    if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
-      // Set zooming state to disable transitions
-      setIsZooming(true);
+      // Check if Shift is held for pan mode, or Ctrl/Cmd for zoom
+      const isPanMode = e.shiftKey || (!e.ctrlKey && !e.metaKey);
+      
+      if (isPanMode && opts.enablePan) {
+        // Pan mode: Shift+wheel for horizontal, regular wheel for vertical
+        const panSpeed = 1.5; // Adjust for responsiveness
+        
+        if (e.shiftKey) {
+          // Horizontal panning with Shift+wheel
+          setPan((prev) => ({
+            x: prev.x - e.deltaY * panSpeed,
+            y: prev.y
+          }));
+        } else {
+          // Regular scrolling: vertical pan (deltaY) and horizontal pan (deltaX for trackpads)
+          setPan((prev) => ({
+            x: prev.x - e.deltaX * panSpeed,
+            y: prev.y - e.deltaY * panSpeed
+          }));
+        }
+      } else if (opts.enableZoom) {
+        // Zoom mode with Ctrl/Cmd+wheel
+        // Set zooming state to disable transitions
+        setIsZooming(true);
 
-      // Clear existing timeout
-      if (zoomTimeoutRef.current) {
-        clearTimeout(zoomTimeoutRef.current);
+        // Clear existing timeout
+        if (zoomTimeoutRef.current) {
+          clearTimeout(zoomTimeoutRef.current);
+        }
+
+        // Reset zooming state after wheel events stop
+        zoomTimeoutRef.current = setTimeout(() => {
+          setIsZooming(false);
+        }, 150);
+
+        // Detect if using trackpad vs mouse wheel
+        const isTrackpad = Math.abs(e.deltaY) < 50;
+        const sensitivity = isTrackpad 
+          ? opts.zoomSensitivity.trackpad! 
+          : opts.zoomSensitivity.mouse!;
+
+        // Apply logarithmic scaling for natural feel
+        const zoomFactor = Math.exp(-e.deltaY * sensitivity);
+        const newZoom = Math.min(Math.max(zoom * zoomFactor, opts.minZoom), opts.maxZoom);
+
+        // Zoom towards mouse position
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Calculate the point in diagram space (before zoom)
+        const pointX = (x - rect.width / 2 - pan.x) / zoom;
+        const pointY = (y - rect.height / 2 - pan.y) / zoom;
+
+        // Calculate new pan to keep the same point under the mouse
+        setPan({
+          x: x - rect.width / 2 - pointX * newZoom,
+          y: y - rect.height / 2 - pointY * newZoom,
+        });
+
+        setZoom(newZoom);
+        setHasManuallyZoomed(true);
       }
-
-      // Reset zooming state after wheel events stop
-      zoomTimeoutRef.current = setTimeout(() => {
-        setIsZooming(false);
-      }, 150);
-
-      // Detect if using trackpad vs mouse wheel
-      const isTrackpad = Math.abs(e.deltaY) < 50;
-      const sensitivity = isTrackpad 
-        ? opts.zoomSensitivity.trackpad! 
-        : opts.zoomSensitivity.mouse!;
-
-      // Apply logarithmic scaling for natural feel
-      const zoomFactor = Math.exp(-e.deltaY * sensitivity);
-      const newZoom = Math.min(Math.max(zoom * zoomFactor, opts.minZoom), opts.maxZoom);
-
-      // Zoom towards mouse position
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      // Calculate the point in diagram space (before zoom)
-      const pointX = (x - rect.width / 2 - pan.x) / zoom;
-      const pointY = (y - rect.height / 2 - pan.y) / zoom;
-
-      // Calculate new pan to keep the same point under the mouse
-      setPan({
-        x: x - rect.width / 2 - pointX * newZoom,
-        y: y - rect.height / 2 - pointY * newZoom,
-      });
-
-      setZoom(newZoom);
-      setHasManuallyZoomed(true);
     };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
@@ -217,6 +247,7 @@ export function usePanZoom(
     handleZoomOut,
     handleZoomReset,
     handleFitToScreen,
+    handleKeyPan,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
