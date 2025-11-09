@@ -7,6 +7,10 @@ See through your agent's eyes. Visualize legacy code, inspect complex flows, und
 
 ![Screenshot](https://raw.githubusercontent.com/abrinsmead/mindpilot-mcp/main/mindpilot-mcp-latest.png)
 
+<a href="https://glama.ai/mcp/servers/@abrinsmead/mindpilot-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@abrinsmead/mindpilot-mcp/badge" alt="Mindpilot MCP server" />
+</a>
+
 ## Why Mindpilot?
 - **Visualize Anything**: Use your coding agent to generate on-demand architecture, code, and process diagrams to view your code from different perspectives.
 - **Vibe Checks**: AI-generated code can accumulate unused and redundant constructs. Use visualizations to spot areas that need cleanup.
