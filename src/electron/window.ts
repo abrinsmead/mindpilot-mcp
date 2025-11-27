@@ -118,7 +118,7 @@ export function createMainWindow(preloadPath: string, isDev: boolean, showOnRead
   if (isDev) {
     // Development: load from Vite dev server
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    // DevTools can be opened manually with Cmd+Option+I (macOS) or F12 (Windows/Linux)
   } else {
     // Production: load built files
     const indexPath = path.join(__dirname, '../public/index.html');
