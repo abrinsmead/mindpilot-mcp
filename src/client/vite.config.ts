@@ -1,37 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
-import electron from 'vite-plugin-electron/simple'
 
 const isElectron = process.env.ELECTRON === 'true'
 
 export default defineConfig({
   plugins: [
     react(),
-    // Only include electron plugin when building for Electron
-    ...(isElectron ? [
-      electron({
-        main: {
-          entry: '../electron/main.ts',
-          vite: {
-            build: {
-              outDir: '../../dist/electron',
-              rollupOptions: {
-                external: ['electron'],
-              },
-            },
-          },
-        },
-        preload: {
-          input: '../electron/preload.ts',
-          vite: {
-            build: {
-              outDir: '../../dist/electron',
-            },
-          },
-        },
-      }),
-    ] : []),
+    // Note: We build Electron main/preload separately with tsc, not via vite-plugin-electron
+    // This avoids path issues and duplicate Electron process launches
   ],
   resolve: {
     alias: {
