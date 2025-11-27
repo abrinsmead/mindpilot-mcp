@@ -233,6 +233,16 @@ export const api = {
     // In browser mode, no-op
     return () => {};
   },
+
+  // Window event listeners (Electron only)
+  onWindowFocus(callback: () => void): () => void {
+    if (electronAPI?.onWindowFocus) {
+      return electronAPI.onWindowFocus(callback);
+    }
+    // In browser mode, use native focus event
+    window.addEventListener('focus', callback);
+    return () => window.removeEventListener('focus', callback);
+  },
 };
 
 // Re-export types

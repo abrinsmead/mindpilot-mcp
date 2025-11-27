@@ -175,6 +175,21 @@ export function App() {
     };
   }, [setDiagram, setTitle, setCurrentDiagramId, setStatus, setHistoryRefreshTrigger]);
 
+  // Listen for window focus events to refresh history (Electron mode)
+  useEffect(() => {
+    console.log('[App] Setting up window focus listener');
+
+    const unsubscribe = api.onWindowFocus(() => {
+      console.log('[App] Window focused - refreshing history');
+      setHistoryRefreshTrigger(prev => prev + 1);
+    });
+
+    return () => {
+      console.log('[App] Cleaning up window focus listener');
+      unsubscribe();
+    };
+  }, [setHistoryRefreshTrigger]);
+
   // Update URL when diagram selection changes
   const updateUrlForDiagram = useCallback((diagramId: string | null) => {
     const pathMatch = window.location.pathname.match(/^\/artifacts\/([a-zA-Z0-9-]+)$/);

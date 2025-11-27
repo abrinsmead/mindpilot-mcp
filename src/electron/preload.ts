@@ -54,6 +54,9 @@ export interface ElectronAPI {
   onMCPDiagramUpdate: (callback: (data: MCPDiagramUpdate) => void) => () => void;
   onMCPStatus: (callback: (data: MCPStatus) => void) => () => void;
 
+  // Window event listeners
+  onWindowFocus: (callback: () => void) => () => void;
+
   // Platform info
   platform: NodeJS.Platform;
   isElectron: true;
@@ -121,6 +124,13 @@ const electronAPI: ElectronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, data: MCPStatus) => callback(data);
     ipcRenderer.on(IPC_CHANNELS.MCP_STATUS, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MCP_STATUS, handler);
+  },
+
+  // Window event listeners - return unsubscribe function
+  onWindowFocus: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_FOCUS, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_FOCUS, handler);
   },
 
   // Platform info

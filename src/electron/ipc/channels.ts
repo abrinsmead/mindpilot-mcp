@@ -38,6 +38,9 @@ export const IPC_CHANNELS = {
   // MCP events (main -> renderer)
   MCP_DIAGRAM_UPDATE: 'mcp:diagramUpdate',
   MCP_STATUS: 'mcp:status',
+
+  // Window events (main -> renderer)
+  WINDOW_FOCUS: 'window:focus',
 } as const;
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

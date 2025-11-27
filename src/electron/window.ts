@@ -6,6 +6,7 @@ import { BrowserWindow, screen, nativeTheme, app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { IPC_CHANNELS } from './ipc/channels.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,6 +117,16 @@ export function createMainWindow(preloadPath: string, isDev: boolean, showOnRead
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  // Notify renderer when window is focused (for refreshing history)
+  mainWindow.on('focus', () => {
+    mainWindow?.webContents.send(IPC_CHANNELS.WINDOW_FOCUS);
+  });
+
+  // Also notify when window is shown (e.g., restored from minimized)
+  mainWindow.on('show', () => {
+    mainWindow?.webContents.send(IPC_CHANNELS.WINDOW_FOCUS);
   });
 
   // Load the app
