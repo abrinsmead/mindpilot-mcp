@@ -25,7 +25,7 @@ const DEFAULT_WINDOW_STATE: WindowState = {
 
 let mainWindow: BrowserWindow | null = null;
 
-export function createMainWindow(preloadPath: string, isDev: boolean): BrowserWindow {
+export function createMainWindow(preloadPath: string, isDev: boolean, showOnReady: boolean = true): BrowserWindow {
   // Get saved window state or use defaults
   const windowState = getWindowState();
 
@@ -52,10 +52,12 @@ export function createMainWindow(preloadPath: string, isDev: boolean): BrowserWi
     mainWindow.maximize();
   }
 
-  // Show window when ready
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
+  // Show window when ready (unless starting hidden for MCP mode)
+  if (showOnReady) {
+    mainWindow.once('ready-to-show', () => {
+      mainWindow?.show();
+    });
+  }
 
   // Save window state on close
   mainWindow.on('close', () => {

@@ -70,12 +70,15 @@ async function initialize(): Promise<void> {
   const menu = createMenu();
   Menu.setApplicationMenu(menu);
 
-  // Create main window
+  // Create main window (hidden in MCP mode until a diagram is rendered)
   const preloadPath = path.join(__dirname, 'preload.js');
-  createMainWindow(preloadPath, isDev);
+  const showOnReady = !isMCPMode; // Hide initially in MCP mode
+  createMainWindow(preloadPath, isDev, showOnReady);
 
-  // Ensure window is visible on screen
-  ensureWindowVisible();
+  // Ensure window is visible on screen (only if showing)
+  if (showOnReady) {
+    ensureWindowVisible();
+  }
 
   // Start MCP server if launched by MCP host
   if (isMCPMode) {
