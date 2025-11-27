@@ -2,12 +2,16 @@
  * Window Management for Electron
  */
 
-import { BrowserWindow, screen, nativeTheme } from 'electron';
+import { BrowserWindow, screen, nativeTheme, app } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Path to store window state
+const getWindowStatePath = () => path.join(app.getPath('userData'), 'window-state.json');
 
 // Colors for light and dark mode
 const COLORS = {
@@ -133,23 +137,37 @@ export function getMainWindow(): BrowserWindow | null {
 }
 
 function getWindowState(): WindowState {
-  // In a real app, you'd load this from electron-store or similar
-  // For now, return defaults
+  try {
+    const statePath = getWindowStatePath();
+    if (fs.existsSync(statePath)) {
+      const data = fs.readFileSync(statePath, 'utf-8');
+      const state = JSON.parse(data) as WindowState;
+      // Validate the loaded state has required properties
+      if (typeof state.width === 'number' && typeof state.height === 'number') {
+        return state;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load window state:', error);
+  }
   return DEFAULT_WINDOW_STATE;
 }
 
 function saveWindowState(window: BrowserWindow): void {
-  // In a real app, you'd save this to electron-store or similar
-  const bounds = window.getBounds();
-  const state: WindowState = {
-    width: bounds.width,
-    height: bounds.height,
-    x: bounds.x,
-    y: bounds.y,
-    isMaximized: window.isMaximized(),
-  };
-  // TODO: Save state to persistent storage
-  console.log('Window state to save:', state);
+  try {
+    const bounds = window.getBounds();
+    const state: WindowState = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: window.isMaximized(),
+    };
+    const statePath = getWindowStatePath();
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  } catch (error) {
+    console.error('Failed to save window state:', error);
+  }
 }
 
 export function ensureWindowVisible(): void {
