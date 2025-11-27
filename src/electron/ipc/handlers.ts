@@ -13,8 +13,9 @@ import { DiagramHistoryEntry } from '../../shared/types.js';
 
 let historyService: HistoryService;
 
-export function initializeIPCHandlers(dataPath?: string): void {
-  historyService = new HistoryService(dataPath);
+export function initializeIPCHandlers(dataPath?: string, sharedHistoryService?: HistoryService): void {
+  // Use shared HistoryService if provided (e.g., from MCP server), otherwise create new one
+  historyService = sharedHistoryService || new HistoryService(dataPath);
 
   // Diagram operations
   ipcMain.handle(IPC_CHANNELS.DIAGRAM_RENDER, async (_event, diagram: string, background?: string, workingDir?: string, title?: string) => {

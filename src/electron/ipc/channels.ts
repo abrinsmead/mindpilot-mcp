@@ -34,6 +34,10 @@ export const IPC_CHANNELS = {
   // Theme
   THEME_GET: 'theme:get',
   THEME_SET: 'theme:set',
+
+  // MCP events (main -> renderer)
+  MCP_DIAGRAM_UPDATE: 'mcp:diagramUpdate',
+  MCP_STATUS: 'mcp:status',
 } as const;
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

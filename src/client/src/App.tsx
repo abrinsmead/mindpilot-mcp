@@ -11,7 +11,7 @@ import { usePanZoom } from "@/hooks/usePanZoom";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useFeatureFlag } from "@/hooks/useQueryParam";
 import { useExportDiagram } from "@/hooks";
-import { api } from "@/lib/electron";
+import { api, isElectron } from "@/lib/electron";
 
 
 export function App() {
@@ -65,7 +65,7 @@ export function App() {
 
 
   // Shared state for forcing history refresh
-  const [historyRefreshTrigger] = useState(0);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
 
   // Handle title change from diagram title component
   const handleTitleChange = useCallback(async (newTitle: string) => {
@@ -152,6 +152,28 @@ export function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentDiagramId, loadDiagramById, setCurrentDiagramId, setDiagram, setTitle, setCollection]);
+
+  // Listen for MCP diagram updates (Electron mode)
+  useEffect(() => {
+    if (!isElectron) return;
+
+    console.log('[App] Setting up MCP diagram update listener');
+
+    const unsubscribe = api.onMCPDiagramUpdate((data) => {
+      console.log('[App] Received MCP diagram update:', { title: data.title, id: data.id });
+      setDiagram(data.diagram);
+      setTitle(data.title);
+      setCurrentDiagramId(data.id);
+      setStatus('Received from AI');
+      // Refresh history panel to show the new diagram
+      setHistoryRefreshTrigger(prev => prev + 1);
+    });
+
+    return () => {
+      console.log('[App] Cleaning up MCP diagram update listener');
+      unsubscribe();
+    };
+  }, [setDiagram, setTitle, setCurrentDiagramId, setStatus, setHistoryRefreshTrigger]);
 
   // Update URL when diagram selection changes
   const updateUrlForDiagram = useCallback((diagramId: string | null) => {

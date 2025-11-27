@@ -6,6 +6,17 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels.js';
 
+// Type definitions for MCP events
+export interface MCPDiagramUpdate {
+  diagram: string;
+  title: string;
+  id: string;
+}
+
+export interface MCPStatus {
+  active: boolean;
+}
+
 // Type definitions for the exposed API
 export interface ElectronAPI {
   // Diagram operations
@@ -38,6 +49,10 @@ export interface ElectronAPI {
   // Theme operations
   getTheme: () => Promise<'light' | 'dark'>;
   setTheme: (theme: 'light' | 'dark' | 'system') => Promise<any>;
+
+  // MCP event listeners
+  onMCPDiagramUpdate: (callback: (data: MCPDiagramUpdate) => void) => () => void;
+  onMCPStatus: (callback: (data: MCPStatus) => void) => () => void;
 
   // Platform info
   platform: NodeJS.Platform;
@@ -95,6 +110,18 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.THEME_GET),
   setTheme: (theme) =>
     ipcRenderer.invoke(IPC_CHANNELS.THEME_SET, theme),
+
+  // MCP event listeners - return unsubscribe function
+  onMCPDiagramUpdate: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: MCPDiagramUpdate) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.MCP_DIAGRAM_UPDATE, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MCP_DIAGRAM_UPDATE, handler);
+  },
+  onMCPStatus: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: MCPStatus) => callback(data);
+    ipcRenderer.on(IPC_CHANNELS.MCP_STATUS, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MCP_STATUS, handler);
+  },
 
   // Platform info
   platform: process.platform,

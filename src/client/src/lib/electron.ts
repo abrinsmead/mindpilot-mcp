@@ -216,6 +216,23 @@ export const api = {
     // In browser, theme is handled by React context
     return { success: true };
   },
+
+  // MCP event listeners (Electron only)
+  onMCPDiagramUpdate(callback: (data: { diagram: string; title: string; id: string }) => void): () => void {
+    if (electronAPI?.onMCPDiagramUpdate) {
+      return electronAPI.onMCPDiagramUpdate(callback);
+    }
+    // In browser mode, no-op (SSE handles this)
+    return () => {};
+  },
+
+  onMCPStatus(callback: (data: { active: boolean }) => void): () => void {
+    if (electronAPI?.onMCPStatus) {
+      return electronAPI.onMCPStatus(callback);
+    }
+    // In browser mode, no-op
+    return () => {};
+  },
 };
 
 // Re-export types
