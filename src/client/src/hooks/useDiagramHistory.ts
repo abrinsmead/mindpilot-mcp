@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { api } from '@/lib/electron';
 
 export interface DiagramHistoryEntry {
   version?: number;
@@ -43,11 +44,8 @@ export function useDiagramHistory({ searchQuery, organizeByDate, currentDiagramI
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/history');
-      if (response.ok) {
-        const data = await response.json();
-        setHistory(data);
-      }
+      const data = await api.getHistory();
+      setHistory(data);
     } catch (error) {
       console.error('Failed to fetch history:', error);
     } finally {
@@ -62,17 +60,8 @@ export function useDiagramHistory({ searchQuery, organizeByDate, currentDiagramI
     }
 
     try {
-      const response = await fetch(`/api/history/${entry.id}`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        setHistory(prev => prev.filter(h => h.id !== entry.id));
-      } else {
-        const errorData = await response.text();
-        console.error('Delete failed:', response.status, errorData);
-        alert(`Failed to delete diagram: ${response.statusText}`);
-      }
+      await api.deleteDiagram(entry.id);
+      setHistory(prev => prev.filter(h => h.id !== entry.id));
     } catch (error) {
       console.error('Failed to delete diagram:', error);
       alert('Failed to delete diagram');
@@ -86,27 +75,14 @@ export function useDiagramHistory({ searchQuery, organizeByDate, currentDiagramI
     }
 
     try {
-      const response = await fetch(`/api/history/${entry.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ title: newTitle.trim() }),
-      });
-      
-      if (response.ok) {
-        setHistory(prev => prev.map(h => 
-          h.id === entry.id ? { ...h, title: newTitle.trim() } : h
-        ));
-        
-        // If this is the currently active diagram, update the diagram context too
-        if (currentDiagramId === entry.id && onCurrentDiagramTitleChange) {
-          onCurrentDiagramTitleChange(newTitle.trim());
-        }
-      } else {
-        const errorData = await response.text();
-        console.error('Rename failed:', response.status, errorData);
-        alert(`Failed to rename diagram: ${response.statusText}`);
+      await api.updateDiagram(entry.id, { title: newTitle.trim() });
+      setHistory(prev => prev.map(h =>
+        h.id === entry.id ? { ...h, title: newTitle.trim() } : h
+      ));
+
+      // If this is the currently active diagram, update the diagram context too
+      if (currentDiagramId === entry.id && onCurrentDiagramTitleChange) {
+        onCurrentDiagramTitleChange(newTitle.trim());
       }
     } catch (error) {
       console.error('Failed to rename diagram:', error);
