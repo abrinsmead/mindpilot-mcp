@@ -92,19 +92,19 @@ export const HistoryPanel = forwardRef<HistoryPanelRef, HistoryPanelProps>(({
   useEffect(() => {
     if (initialDiagramId && !loading && groupedHistory.length > 0 && !hasHandledInitialLoad.current) {
       // Check if the diagram exists in history
-      const diagramExists = groupedHistory.some(([_, diagrams]) => 
+      const diagramExists = groupedHistory.some(([_, diagrams]) =>
         diagrams.some(d => d.id === initialDiagramId)
       );
-      
+
       if (diagramExists) {
         console.log('[HistoryPanel] Auto-selecting diagram from URL:', initialDiagramId);
         // Mark that we've handled the initial load
         hasHandledInitialLoad.current = true;
-        
+
         // Always trigger selection for URL diagrams, even if already selected
         // This ensures the diagram content is loaded
         onSelectDiagram(initialDiagramId);
-        
+
         // Enable scrolling for URL-loaded diagrams
         setShouldScrollToSelected(true);
         // Disable scrolling after a short delay
@@ -112,6 +112,20 @@ export const HistoryPanel = forwardRef<HistoryPanelRef, HistoryPanelProps>(({
       }
     }
   }, [initialDiagramId, loading, groupedHistory, onSelectDiagram]);
+
+  // Scroll to selected diagram when refreshTrigger changes (e.g., from MCP update)
+  const prevRefreshTrigger = useRef(refreshTrigger);
+  useEffect(() => {
+    if (refreshTrigger !== prevRefreshTrigger.current && currentDiagramId && !loading) {
+      console.log('[HistoryPanel] Refresh triggered, scrolling to selected diagram:', currentDiagramId);
+      prevRefreshTrigger.current = refreshTrigger;
+
+      // Enable scrolling to the selected diagram
+      setShouldScrollToSelected(true);
+      // Disable scrolling after a short delay
+      setTimeout(() => setShouldScrollToSelected(false), 1000);
+    }
+  }, [refreshTrigger, currentDiagramId, loading]);
 
   const handleModeChange = (mode: 'local' | 'cloud') => {
     if (mode === 'cloud') {
