@@ -131,38 +131,56 @@ if (!gotTheLock) {
   // Pass the diagram ID to the existing instance and quit
   app.quit();
 } else {
-  app.on('second-instance', (_event, commandLine, _workingDirectory) => {
-    // Focus the main window if a second instance is launched
-    const mainWindow = getMainWindow();
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
-      }
-      mainWindow.show();
-      mainWindow.focus();
+  app.on('second-instance', async (_event, commandLine, _workingDirectory) => {
+    let mainWindow = getMainWindow();
 
-      // Check if the second instance was launched with --show-diagram
-      const showDiagramIndex = commandLine.indexOf('--show-diagram');
-      if (showDiagramIndex !== -1 && commandLine[showDiagramIndex + 1]) {
-        const diagramId = commandLine[showDiagramIndex + 1];
-        console.log(`[Main] Second instance requested diagram: ${diagramId}`);
+    // If no window exists (e.g., closed on macOS), create one
+    if (!mainWindow) {
+      const preloadPath = path.join(__dirname, 'preload.js');
+      mainWindow = createMainWindow(preloadPath, isDev, true);
+    }
 
-        // Load and display the diagram
-        const { dataPath } = parseArgs();
-        const historyService = new HistoryService(dataPath);
+    // Restore if minimized
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
 
-        historyService.getDiagrams().then(diagrams => {
+    // Show and focus
+    mainWindow.show();
+    mainWindow.focus();
+
+    // Check if the second instance was launched with --show-diagram
+    const showDiagramIndex = commandLine.indexOf('--show-diagram');
+    if (showDiagramIndex !== -1 && commandLine[showDiagramIndex + 1]) {
+      const diagramId = commandLine[showDiagramIndex + 1];
+      console.log(`[Main] Second instance requested diagram: ${diagramId}`);
+
+      // Load and display the diagram
+      const { dataPath } = parseArgs();
+      const historyService = new HistoryService(dataPath);
+
+      // Wait for window to be ready if it was just created
+      const sendDiagram = async () => {
+        try {
+          const diagrams = await historyService.getDiagrams();
           const diagram = diagrams.find(d => d.id === diagramId);
-          if (diagram) {
+          if (diagram && mainWindow) {
             mainWindow.webContents.send(IPC_CHANNELS.MCP_DIAGRAM_UPDATE, {
               diagram: diagram.diagram,
               title: diagram.title,
               id: diagram.id,
             });
           }
-        }).catch(error => {
+        } catch (error) {
           console.error('[Main] Failed to load diagram:', error);
-        });
+        }
+      };
+
+      // If the page is already loaded, send immediately; otherwise wait
+      if (mainWindow.webContents.isLoading()) {
+        mainWindow.webContents.once('did-finish-load', sendDiagram);
+      } else {
+        sendDiagram();
       }
     }
   });
