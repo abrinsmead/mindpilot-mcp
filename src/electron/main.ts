@@ -1,11 +1,11 @@
 /**
  * Electron Main Process Entry Point
  *
- * This Electron app can be launched in two ways:
- * 1. Directly by user - Shows UI, no MCP
- * 2. By AI assistant (MCP host) - Shows UI AND handles MCP protocol on stdio
+ * This is a standalone Electron UI app that can be:
+ * 1. Launched directly by user - Shows UI with history
+ * 2. Launched by MCP server with --show-diagram=<id> to display a specific diagram
  *
- * NO HTTP SERVER NEEDED - Everything is handled via IPC!
+ * The MCP protocol is handled by a separate lightweight Node.js process.
  */
 
 import { app, Menu, BrowserWindow } from 'electron';
@@ -14,8 +14,8 @@ import { fileURLToPath } from 'url';
 import { createMainWindow, getMainWindow, ensureWindowVisible } from './window.js';
 import { createMenu } from './menu.js';
 import { initializeIPCHandlers, cleanupIPCHandlers } from './ipc/handlers.js';
-import { EmbeddedMCPServer } from './mcp/embeddedServer.js';
 import { IPC_CHANNELS } from './ipc/channels.js';
+import { HistoryService } from '../shared/historyService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,25 +23,12 @@ const __dirname = path.dirname(__filename);
 // Check if running in development mode
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-// Check if launched by MCP host
-// Either via --mcp flag (explicit) or stdin is piped (implicit)
-const isMCPMode = process.argv.includes('--mcp') || !process.stdin.isTTY;
-
-console.log('[Main] Launch mode:', {
-  isMCPMode,
-  hasFlag: process.argv.includes('--mcp'),
-  stdinIsTTY: process.stdin.isTTY,
-  argv: process.argv
-});
-
-// Global reference to MCP server
-let mcpServer: EmbeddedMCPServer | null = null;
-
 // Parse command line arguments
-function parseArgs(): { dataPath?: string; disableAnalytics: boolean } {
+function parseArgs(): { dataPath?: string; disableAnalytics: boolean; showDiagramId?: string } {
   const args = process.argv.slice(2);
   let dataPath: string | undefined;
   let disableAnalytics = false;
+  let showDiagramId: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--data-path' && args[i + 1]) {
@@ -51,60 +38,63 @@ function parseArgs(): { dataPath?: string; disableAnalytics: boolean } {
     if (args[i] === '--disable-analytics') {
       disableAnalytics = true;
     }
+    if (args[i] === '--show-diagram' && args[i + 1]) {
+      showDiagramId = args[i + 1];
+      i++;
+    }
   }
 
-  return { dataPath, disableAnalytics };
+  return { dataPath, disableAnalytics, showDiagramId };
 }
 
 async function initialize(): Promise<void> {
-  const { dataPath, disableAnalytics } = parseArgs();
+  const { dataPath, disableAnalytics, showDiagramId } = parseArgs();
 
-  // Create embedded MCP server (shares HistoryService with IPC handlers)
-  mcpServer = new EmbeddedMCPServer(dataPath);
+  console.log('[Main] Starting Electron UI', { dataPath, showDiagramId, isDev });
 
-  // Initialize IPC handlers with the same HistoryService
-  initializeIPCHandlers(dataPath, mcpServer.getHistoryService(), { disableAnalytics });
+  // Create history service
+  const historyService = new HistoryService(dataPath);
 
-  // Set up diagram update handler - sends to renderer when MCP receives a diagram
-  mcpServer.setDiagramUpdateHandler((diagram, title, id) => {
-    const mainWindow = getMainWindow();
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      console.log(`[Main] Sending diagram update to renderer: ${title} (${id})`);
-      mainWindow.webContents.send(IPC_CHANNELS.MCP_DIAGRAM_UPDATE, { diagram, title, id });
-    }
-  });
+  // Initialize IPC handlers
+  initializeIPCHandlers(dataPath, historyService, { disableAnalytics });
 
   // Set up menu
   const menu = createMenu();
   Menu.setApplicationMenu(menu);
 
-  // Create main window (hidden in MCP mode until a diagram is rendered)
+  // Create main window
   const preloadPath = path.join(__dirname, 'preload.js');
-  const showOnReady = !isMCPMode; // Hide initially in MCP mode
-  createMainWindow(preloadPath, isDev, showOnReady);
+  createMainWindow(preloadPath, isDev, true);
 
-  // Ensure window is visible on screen (only if showing)
-  if (showOnReady) {
-    ensureWindowVisible();
-  }
+  // Ensure window is visible on screen
+  ensureWindowVisible();
 
-  // Start MCP server if launched by MCP host
-  if (isMCPMode) {
-    console.log('[Main] Detected MCP mode - starting embedded MCP server');
-    try {
-      await mcpServer.start();
-      console.log('[Main] MCP server started successfully');
+  // If launched with --show-diagram, send the diagram to the renderer once it's ready
+  if (showDiagramId) {
+    const mainWindow = getMainWindow();
+    if (mainWindow) {
+      mainWindow.webContents.once('did-finish-load', async () => {
+        try {
+          // Load the diagram from history
+          const diagrams = await historyService.getDiagrams();
+          const diagram = diagrams.find(d => d.id === showDiagramId);
 
-      // Notify renderer that MCP is active
-      const mainWindow = getMainWindow();
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(IPC_CHANNELS.MCP_STATUS, { active: true });
-      }
-    } catch (error) {
-      console.error('[Main] Failed to start MCP server:', error);
+          if (diagram) {
+            console.log(`[Main] Loading diagram: ${diagram.title} (${showDiagramId})`);
+            // Send to renderer to display
+            mainWindow.webContents.send(IPC_CHANNELS.MCP_DIAGRAM_UPDATE, {
+              diagram: diagram.diagram,
+              title: diagram.title,
+              id: diagram.id,
+            });
+          } else {
+            console.warn(`[Main] Diagram not found: ${showDiagramId}`);
+          }
+        } catch (error) {
+          console.error('[Main] Failed to load diagram:', error);
+        }
+      });
     }
-  } else {
-    console.log('[Main] Standalone mode - no MCP server');
   }
 }
 
@@ -130,16 +120,43 @@ app.on('activate', () => {
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
+  // Another instance is already running
+  // Pass the diagram ID to the existing instance and quit
   app.quit();
 } else {
-  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+  app.on('second-instance', (_event, commandLine, _workingDirectory) => {
     // Focus the main window if a second instance is launched
     const mainWindow = getMainWindow();
     if (mainWindow) {
       if (mainWindow.isMinimized()) {
         mainWindow.restore();
       }
+      mainWindow.show();
       mainWindow.focus();
+
+      // Check if the second instance was launched with --show-diagram
+      const showDiagramIndex = commandLine.indexOf('--show-diagram');
+      if (showDiagramIndex !== -1 && commandLine[showDiagramIndex + 1]) {
+        const diagramId = commandLine[showDiagramIndex + 1];
+        console.log(`[Main] Second instance requested diagram: ${diagramId}`);
+
+        // Load and display the diagram
+        const { dataPath } = parseArgs();
+        const historyService = new HistoryService(dataPath);
+
+        historyService.getDiagrams().then(diagrams => {
+          const diagram = diagrams.find(d => d.id === diagramId);
+          if (diagram) {
+            mainWindow.webContents.send(IPC_CHANNELS.MCP_DIAGRAM_UPDATE, {
+              diagram: diagram.diagram,
+              title: diagram.title,
+              id: diagram.id,
+            });
+          }
+        }).catch(error => {
+          console.error('[Main] Failed to load diagram:', error);
+        });
+      }
     }
   });
 }
