@@ -2,12 +2,22 @@
  * Window Management for Electron
  */
 
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, screen, nativeTheme } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Colors for light and dark mode
+const COLORS = {
+  light: {
+    background: '#ffffff',
+  },
+  dark: {
+    background: '#1a1a2e',
+  },
+};
 
 export interface WindowState {
   width: number;
@@ -29,6 +39,10 @@ export function createMainWindow(preloadPath: string, isDev: boolean, showOnRead
   // Get saved window state or use defaults
   const windowState = getWindowState();
 
+  // Get initial theme
+  const isDarkMode = nativeTheme.shouldUseDarkColors;
+  const backgroundColor = isDarkMode ? COLORS.dark.background : COLORS.light.background;
+
   mainWindow = new BrowserWindow({
     width: windowState.width,
     height: windowState.height,
@@ -37,14 +51,44 @@ export function createMainWindow(preloadPath: string, isDev: boolean, showOnRead
     minWidth: 800,
     minHeight: 600,
     title: 'Mindpilot',
-    backgroundColor: '#1a1a2e',
+    backgroundColor,
     show: false, // Don't show until ready
+    // macOS-specific: use native titlebar that respects system theme
+    titleBarStyle: process.platform === 'darwin' ? 'default' : undefined,
+    // Windows-specific: use dark title bar when in dark mode
+    ...(process.platform === 'win32' && {
+      titleBarOverlay: isDarkMode ? {
+        color: COLORS.dark.background,
+        symbolColor: '#ffffff',
+      } : {
+        color: COLORS.light.background,
+        symbolColor: '#000000',
+      },
+    }),
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // Required for preload script imports
     },
+  });
+
+  // Listen for theme changes and update window
+  nativeTheme.on('updated', () => {
+    if (!mainWindow) return;
+
+    const newIsDarkMode = nativeTheme.shouldUseDarkColors;
+    const newBackgroundColor = newIsDarkMode ? COLORS.dark.background : COLORS.light.background;
+
+    mainWindow.setBackgroundColor(newBackgroundColor);
+
+    // Update Windows titlebar overlay
+    if (process.platform === 'win32') {
+      mainWindow.setTitleBarOverlay({
+        color: newBackgroundColor,
+        symbolColor: newIsDarkMode ? '#ffffff' : '#000000',
+      });
+    }
   });
 
   // Restore maximized state
