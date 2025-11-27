@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { api } from '@/lib/electron';
 
 export interface DiagramContextValue {
   // State
@@ -43,16 +44,11 @@ export function DiagramProvider({ children }: DiagramProviderProps) {
   const loadDiagramById = useCallback(async (id: string) => {
     try {
       setIsLoadingDiagram(true);
-      
-      // Fetch history from API
-      const response = await fetch('/api/history');
-      if (!response.ok) {
-        throw new Error('Failed to fetch history');
-      }
-      
-      const history = await response.json();
+
+      // Fetch history from API (uses IPC in Electron, HTTP in browser)
+      const history = await api.getHistory();
       const entry = history.find((h: any) => h.id === id);
-      
+
       if (entry) {
         setDiagram(entry.diagram);
         setTitle(entry.title);

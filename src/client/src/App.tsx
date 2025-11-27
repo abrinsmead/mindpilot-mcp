@@ -11,6 +11,7 @@ import { usePanZoom } from "@/hooks/usePanZoom";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useFeatureFlag } from "@/hooks/useQueryParam";
 import { useExportDiagram } from "@/hooks";
+import { api, isElectron } from "@/lib/electron";
 
 
 export function App() {
@@ -64,7 +65,7 @@ export function App() {
 
 
   // Shared state for forcing history refresh
-  const [historyRefreshTrigger] = useState(0);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
 
   // Handle title change from diagram title component
   const handleTitleChange = useCallback(async (newTitle: string) => {
@@ -73,14 +74,7 @@ export function App() {
     // If we have a current diagram ID, also save to server
     if (currentDiagramId) {
       try {
-        await fetch(`/api/history/${currentDiagramId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ title: newTitle }),
-        });
-
+        await api.updateDiagram(currentDiagramId, { title: newTitle });
         // Don't refresh history - the history panel will update its local state
         // when it receives the title change via onCurrentDiagramTitleChange
       } catch (error) {
@@ -92,24 +86,18 @@ export function App() {
   // Handle diagram content change with auto-save
   const handleDiagramChange = useCallback((newDiagram: string) => {
     setDiagram(newDiagram);
-    
+
     // If we have a current diagram ID, save the content after a delay
     if (currentDiagramId && newDiagram.trim()) {
       // Debounce the save operation
       if (saveDiagramTimeoutRef.current) {
         clearTimeout(saveDiagramTimeoutRef.current);
       }
-      
+
       saveDiagramTimeoutRef.current = setTimeout(async () => {
         try {
           setStatus('Saving...');
-          await fetch(`/api/history/${currentDiagramId}`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ diagram: newDiagram }),
-          });
+          await api.updateDiagram(currentDiagramId, { diagram: newDiagram });
           console.log('[App] Saved diagram content for ID:', currentDiagramId);
           setStatus('Saved');
           // Clear saved status after 2 seconds
@@ -164,6 +152,43 @@ export function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentDiagramId, loadDiagramById, setCurrentDiagramId, setDiagram, setTitle, setCollection]);
+
+  // Listen for MCP diagram updates (Electron mode)
+  useEffect(() => {
+    if (!isElectron) return;
+
+    console.log('[App] Setting up MCP diagram update listener');
+
+    const unsubscribe = api.onMCPDiagramUpdate((data) => {
+      console.log('[App] Received MCP diagram update:', { title: data.title, id: data.id });
+      setDiagram(data.diagram);
+      setTitle(data.title);
+      setCurrentDiagramId(data.id);
+      setStatus('Received from AI');
+      // Refresh history panel to show the new diagram
+      setHistoryRefreshTrigger(prev => prev + 1);
+    });
+
+    return () => {
+      console.log('[App] Cleaning up MCP diagram update listener');
+      unsubscribe();
+    };
+  }, [setDiagram, setTitle, setCurrentDiagramId, setStatus, setHistoryRefreshTrigger]);
+
+  // Listen for window focus events to refresh history (Electron mode)
+  useEffect(() => {
+    console.log('[App] Setting up window focus listener');
+
+    const unsubscribe = api.onWindowFocus(() => {
+      console.log('[App] Window focused - refreshing history');
+      setHistoryRefreshTrigger(prev => prev + 1);
+    });
+
+    return () => {
+      console.log('[App] Cleaning up window focus listener');
+      unsubscribe();
+    };
+  }, [setHistoryRefreshTrigger]);
 
   // Update URL when diagram selection changes
   const updateUrlForDiagram = useCallback((diagramId: string | null) => {

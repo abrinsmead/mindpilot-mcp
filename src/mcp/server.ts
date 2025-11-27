@@ -17,11 +17,15 @@ import {
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import path from "path";
-import { RenderResult, ServerStatus } from "../shared/types.js";
-import { isPortInUse } from "../http/server.js";
+import { RenderResult } from "../shared/types.js";
+import { HistoryService } from "../shared/historyService.js";
+import { renderMermaid } from "../shared/renderer.js";
+import { detectGitRepo } from "../shared/gitRepoDetector.js";
 import { mcpLogger as logger } from "../shared/logger.js";
-import { StateMachine, State, Event, StateContext } from "./stateMachine.js";
 import { setMaxListeners } from "events";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const colorPrompt = `
   classDef coral fill:#ff6b6b,stroke:#c92a2a,color:#fff
@@ -42,24 +46,25 @@ const colorPrompt = `
   classDef peach fill:#ffc9c9,stroke:#ffa8a8,color:#000
 `;
 
-export class MindpilotMCPClient {
+/**
+ * Lightweight MCP Server for Mindpilot
+ *
+ * This is a standalone Node.js process that:
+ * 1. Handles MCP protocol on stdio
+ * 2. Renders diagrams directly using shared renderer
+ * 3. Saves diagrams to history
+ * 4. Launches the Electron UI app when needed to display diagrams
+ *
+ * NO HTTP server needed - everything runs locally!
+ */
+export class MindpilotMCPServer {
   private server: Server;
-  private clientId: string;
-  private clientName: string;
-  private httpPort: number;
-  private keepaliveInterval: NodeJS.Timeout | null = null;
-  private stateMachine: StateMachine;
-  private abortController: AbortController | null = null;
-  private waitServerController: AbortController | null = null;
-  private disableAnalytics: boolean;
+  private historyService: HistoryService;
   private dataPath: string | undefined;
 
-  constructor(port: number = 4000, disableAnalytics: boolean = false, dataPath?: string) {
-    this.httpPort = port;
-    this.disableAnalytics = disableAnalytics;
+  constructor(dataPath?: string) {
     this.dataPath = dataPath;
-    this.clientId = `mcp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    this.clientName = `MCP Client ${new Date().toLocaleTimeString()}`;
+    this.historyService = new HistoryService(dataPath);
 
     this.server = new Server(
       {
@@ -74,43 +79,7 @@ export class MindpilotMCPClient {
     );
 
     logger.setMcpServer(this.server);
-
-    // Initialize state machine
-    const context: StateContext = {
-      httpPort: this.httpPort,
-      retryCount: 0,
-      maxRetries: 5,
-    };
-    this.stateMachine = new StateMachine(context);
-    this.setupStateHandlers();
     this.setupHandlers();
-  }
-
-  private getAbortSignal(): AbortSignal | undefined {
-    // Use a single controller for all regular operations
-    if (!this.abortController || this.abortController.signal.aborted) {
-      this.abortController = new AbortController();
-    }
-    return this.abortController.signal;
-  }
-
-  private getWaitServerSignal(): AbortSignal | undefined {
-    // Reuse the same controller for the wait server loop to avoid listener accumulation
-    if (!this.waitServerController || this.waitServerController.signal.aborted) {
-      this.waitServerController = new AbortController();
-    }
-    return this.waitServerController.signal;
-  }
-
-  private cancelAllRequests() {
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-    if (this.waitServerController) {
-      this.waitServerController.abort();
-      this.waitServerController = null;
-    }
   }
 
   private setupHandlers() {
@@ -144,16 +113,10 @@ export class MindpilotMCPClient {
         },
         {
           name: "open_ui",
-          description: "Open the web-based user interface",
+          description: "Open the Mindpilot UI application",
           inputSchema: {
             type: "object",
-            properties: {
-              autoOpen: {
-                type: "boolean",
-                description: "Automatically open browser",
-                default: true,
-              },
-            },
+            properties: {},
           },
         },
       ],
@@ -164,11 +127,9 @@ export class MindpilotMCPClient {
       const { name, arguments: args } = request.params;
 
       try {
-        await this.ensureConnection();
-
         switch (name) {
           case "render_mermaid":
-            const renderResult = await this.renderMermaid(
+            const renderResult = await this.handleRenderMermaid(
               args?.diagram as string,
               args?.background as string,
               args?.title as string,
@@ -183,7 +144,7 @@ export class MindpilotMCPClient {
             };
 
           case "open_ui":
-            const uiResult = await this.openUI(args?.autoOpen as boolean);
+            const uiResult = await this.handleOpenUI();
             return {
               content: [
                 {
@@ -211,401 +172,174 @@ export class MindpilotMCPClient {
     });
   }
 
-  private async ensureConnection(): Promise<void> {
-    const state = this.stateMachine.getState();
-
-    if (state !== State.CONNECTED) {
-      logger.info("Not connected, waiting for connection...", {
-        currentState: state,
-      });
-
-      // Wait for connection with timeout
-      const timeout = 10000; // 10 seconds
-      const startTime = Date.now();
-
-      while (this.stateMachine.getState() !== State.CONNECTED) {
-        if (Date.now() - startTime > timeout) {
-          throw new Error("Timeout waiting for server connection");
-        }
-
-        if (this.stateMachine.getState() === State.ERROR) {
-          throw new Error("Server connection failed");
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-  }
-
-  private async startSingletonServer(): Promise<void> {
-    // Check if debug mode is enabled
-    const isDebugMode = process.argv.includes("--debug");
-
-    // Resolve the HTTP server path in a cross-platform way that works with npm installs
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const httpServerPath = path.resolve(__dirname, "../http/server.js");
-
-    // Start the HTTP server as a separate process
-    const args = [httpServerPath, '--port', this.httpPort.toString()];
-
-    // Pass debug flag to server if enabled
-    if (isDebugMode) {
-      args.push("--debug");
-    }
-
-    // Pass disable-analytics flag to server if enabled
-    if (this.disableAnalytics) {
-      args.push("--disable-analytics");
-    }
-
-    // Pass data-path flag to server if provided
-    if (this.dataPath) {
-      args.push("--data-path");
-      args.push(this.dataPath);
-    }
-
-    const serverProcess = spawn("node", args, {
-      detached: true,
-      stdio: "ignore",
-      env: {
-        ...process.env,
-        MINDPILOT_DEBUG: isDebugMode ? "true" : "false",
-      },
-    });
-
-    serverProcess.unref();
-  }
-
-  private async renderMermaid(
+  /**
+   * Render a Mermaid diagram, save to history, and launch the UI
+   */
+  private async handleRenderMermaid(
     diagram: string,
     background?: string,
     title?: string,
   ): Promise<RenderResult> {
-    // Use HTTP API endpoint
     try {
-      const response = await fetch(
-        `http://localhost:${this.httpPort}/api/render`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            diagram,
-            background,
-            title,
-            clientId: this.clientId,
-            clientName: this.clientName,
-            workingDir: process.cwd(),
-          }),
-          signal: this.getAbortSignal(),
-        },
-      );
+      // Render the diagram using shared renderer
+      const result = await renderMermaid(diagram, background);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (result.type === 'error') {
+        return result;
       }
 
-      const result = (await response.json()) as RenderResult;
+      // Save to history
+      let diagramId: string | undefined;
+      if (title) {
+        try {
+          const workingDir = process.cwd();
+          const collection = await detectGitRepo(workingDir);
+          const savedEntry = await this.historyService.saveDiagram(diagram, title, collection);
+          diagramId = savedEntry.id;
+          logger.info(`Saved diagram "${title}" with ID ${diagramId}`);
+        } catch (error) {
+          logger.error('Failed to save diagram to history', { error });
+        }
+      }
 
-      return result;
+      // Launch Electron UI to display the diagram
+      if (diagramId) {
+        this.launchElectronUI(diagramId);
+      }
+
+      return {
+        ...result,
+        type: 'success',
+      };
     } catch (error) {
       return {
         type: "error",
         diagram,
-        error:
-          error instanceof Error ? error.message : "Failed to render diagram",
+        error: error instanceof Error ? error.message : "Failed to render diagram",
       };
     }
   }
 
-  private async openUI(
-    autoOpen: boolean = true,
-  ): Promise<{ url: string; message: string }> {
-    const isProduction = process.env.NODE_ENV !== "development";
-    const url = isProduction
-      ? `http://localhost:${this.httpPort}`
-      : `http://localhost:5173`;
-
-    const message = isProduction
-      ? `Mindpilot UI is available at ${url}`
-      : `Mindpilot UI is available at ${url} (development mode)`;
-
-    if (autoOpen) {
-      try {
-        const platform = process.platform;
-        let command: string;
-        let args: string[];
-
-        if (platform === "darwin") {
-          command = "open";
-          args = [url];
-        } else if (platform === "win32") {
-          command = "cmd";
-          args = ["/c", "start", url];
-        } else {
-          command = "xdg-open";
-          args = [url];
-        }
-
-        spawn(command, args, { detached: true, stdio: "ignore" }).unref();
-      } catch (error) {
-        logger.error("Failed to open browser", { error });
-      }
-    }
-
-    return { url, message };
+  /**
+   * Open the Mindpilot UI application
+   */
+  private async handleOpenUI(): Promise<{ message: string }> {
+    this.launchElectronUI();
+    return {
+      message: "Mindpilot UI launched",
+    };
   }
 
-  private startKeepalive() {
-    // Send initial keepalive
-    this.sendKeepalive();
-
-    // Send keepalive every 30 seconds
-    this.keepaliveInterval = setInterval(() => {
-      this.sendKeepalive();
-    }, 30000);
-  }
-
-  private async sendKeepalive() {
+  /**
+   * Launch the Electron UI application
+   * Optionally with a specific diagram ID to display
+   *
+   * If an instance is already running, the new process will trigger the
+   * 'second-instance' event on the existing instance and then exit.
+   */
+  private launchElectronUI(diagramId?: string) {
     try {
-      const response = await fetch(
-        `http://localhost:${this.httpPort}/api/keepalive`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId: this.clientId }),
-          signal: this.getAbortSignal(),
-        },
-      );
+      // Path to the Electron main.js (relative to this file's dist location)
+      const electronMainPath = path.resolve(__dirname, '../electron/main.js');
 
-      if (!response.ok) {
-        logger.warn("Keepalive failed", { status: response.status });
-        await this.stateMachine.transition(Event.KEEPALIVE_FAILED);
+      const args = [electronMainPath];
+
+      // Add diagram ID if provided
+      if (diagramId) {
+        args.push('--show-diagram', diagramId);
       }
+
+      // Pass data path if configured
+      if (this.dataPath) {
+        args.push('--data-path', this.dataPath);
+      }
+
+      logger.info('Launching Electron UI', { diagramId, electronMainPath });
+
+      // Find the electron binary - it's in node_modules/.bin relative to the package root
+      // __dirname is dist/mcp, so we go up two levels to get to the package root
+      const packageRoot = path.resolve(__dirname, '../..');
+      const electronBinName = process.platform === 'win32' ? 'electron.cmd' : 'electron';
+      const electronBin = path.join(packageRoot, 'node_modules', '.bin', electronBinName);
+
+      logger.info('Using electron binary', { electronBin });
+
+      // Spawn Electron - if an instance is already running, this will trigger
+      // the 'second-instance' event on the existing instance and exit quickly.
+      // We use 'pipe' for stdio to capture any errors, but don't detach so
+      // we can ensure the single-instance handoff completes properly.
+      const electronProcess = spawn(electronBin, args, {
+        detached: true,
+        stdio: ['ignore', 'ignore', 'pipe'], // Capture stderr for debugging
+        env: {
+          ...process.env,
+          NODE_ENV: process.env.NODE_ENV || 'production',
+        },
+      });
+
+      // Log any errors from the spawned process
+      electronProcess.stderr?.on('data', (data: Buffer) => {
+        const msg = data.toString().trim();
+        if (msg) {
+          logger.warn('Electron stderr', { message: msg });
+        }
+      });
+
+      // Wait a brief moment before unref to ensure single-instance handoff completes
+      setTimeout(() => {
+        electronProcess.unref();
+      }, 500);
+
     } catch (error) {
-      logger.warn("Keepalive error", { error });
-      await this.stateMachine.transition(Event.KEEPALIVE_FAILED);
+      logger.error('Failed to launch Electron UI', { error });
     }
   }
 
-  private setupStateHandlers() {
-    // CHECKING_SERVER state handler
-    this.stateMachine.setStateHandler(
-      State.CHECKING_SERVER,
-      async (context) => {
-        try {
-          const serverRunning = await isPortInUse(
-            context.httpPort,
-            this.getAbortSignal(),
-          );
-          context.serverRunning = serverRunning;
+  /**
+   * Start the MCP server
+   */
+  async start() {
+    const isMCPMode = !process.stdin.isTTY;
 
-          if (serverRunning) {
-            logger.info("Server already running");
-            await this.stateMachine.transition(Event.SERVER_CHECK_COMPLETE);
-          } else {
-            logger.info("Server not running");
-            await this.stateMachine.transition(Event.ERROR_OCCURRED);
-          }
-        } catch (error) {
-          context.error = error as Error;
-          await this.stateMachine.transition(Event.ERROR_OCCURRED);
-        }
-      },
-    );
-
-    // STARTING_SERVER state handler
-    this.stateMachine.setStateHandler(
-      State.STARTING_SERVER,
-      async (context) => {
-        try {
-          logger.info("Starting HTTP server...");
-          await this.startSingletonServer();
-          await this.stateMachine.transition(Event.SERVER_STARTED);
-        } catch (error) {
-          context.error = error as Error;
-          await this.stateMachine.transition(Event.ERROR_OCCURRED);
-        }
-      },
-    );
-
-    // WAITING_FOR_SERVER state handler
-    this.stateMachine.setStateHandler(
-      State.WAITING_FOR_SERVER,
-      async (context) => {
-        // Wait for server to be ready
-        let attempts = 0;
-        const maxAttempts = 20; // 10 seconds total
-
-        while (attempts < maxAttempts) {
-          try {
-            const serverRunning = await isPortInUse(
-              context.httpPort,
-              this.getWaitServerSignal(),
-            );
-            if (serverRunning) {
-              logger.info("Server is now ready");
-              await this.stateMachine.transition(Event.CONNECTION_ESTABLISHED);
-              return;
-            }
-          } catch (error) {
-            // Ignore errors while waiting
-          }
-
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          attempts++;
-        }
-
-        context.error = new Error("Server failed to start within timeout");
-        await this.stateMachine.transition(Event.ERROR_OCCURRED);
-      },
-    );
-
-    // CONNECTED state handler
-    this.stateMachine.setStateHandler(State.CONNECTED, async (context) => {
-      logger.info("Connected to server, starting keepalive");
-      this.startKeepalive();
-    });
-
-    // RECONNECTING state handler
-    this.stateMachine.setStateHandler(State.RECONNECTING, async (context) => {
-      logger.warn("Connection lost, attempting to reconnect...");
-
-      // Stop keepalive during reconnection
-      if (this.keepaliveInterval) {
-        clearInterval(this.keepaliveInterval);
-        this.keepaliveInterval = null;
-      }
-
-      // Cancel any pending requests
-      this.cancelAllRequests();
-
-      // Wait a bit before reconnecting
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      try {
-        const serverRunning = await isPortInUse(
-          context.httpPort,
-          this.getAbortSignal(),
-        );
-        if (serverRunning) {
-          await this.stateMachine.transition(Event.CONNECTION_ESTABLISHED);
-        } else {
-          context.error = new Error("Server no longer running");
-          await this.stateMachine.transition(Event.ERROR_OCCURRED);
-        }
-      } catch (error) {
-        context.error = error as Error;
-        await this.stateMachine.transition(Event.ERROR_OCCURRED);
-      }
-    });
-
-    // ERROR state handler
-    this.stateMachine.setStateHandler(State.ERROR, async (context) => {
-      logger.error("Server connection error", { error: context.error });
-
-      if (context.retryCount < context.maxRetries) {
-        context.retryCount++;
-        logger.info(
-          `Retrying connection (attempt ${context.retryCount}/${context.maxRetries})`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        await this.stateMachine.transition(Event.START);
-      } else {
-        logger.error("Max retries exceeded, exiting MCP client");
-        process.exit(1);
-      }
-    });
-
-    // SHUTDOWN state handler
-    this.stateMachine.setStateHandler(State.SHUTDOWN, async (context) => {
-      logger.info("Shutting down MCP client");
-      if (this.keepaliveInterval) {
-        clearInterval(this.keepaliveInterval);
-        this.keepaliveInterval = null;
-      }
-
-      // Cancel all pending requests
-      this.cancelAllRequests();
-    });
-
-    // Log state transitions
-    this.stateMachine.setOnTransition((from, to, event) => {
-      logger.debug("State transition", { from, to, event });
-    });
-  }
-
-  async start(options: { test?: boolean; debug?: boolean } = {}) {
-    const isTestMode = options.test || false;
-    const isMCPMode = !process.stdin.isTTY || isTestMode;
-
-    if (isMCPMode) {
-      const isDebugMode = options.debug || false;
-      logger.info("Starting Mindpilot MCP client", {
-        debugMode: isDebugMode,
-        testMode: isTestMode,
-      });
-
-      // Start the state machine to ensure server connection
-      await this.stateMachine.transition(Event.START);
-
-      // Wait for connection to be established before connecting stdio
-      await this.ensureConnection();
-
-      // In test mode, don't connect stdio transport
-      if (isTestMode) {
-        logger.info(
-          `Test mode: Server started successfully. UI available at http://localhost:${this.httpPort}`,
-        );
-        logger.info("Use Ctrl+C to exit");
-        // Keep the process alive in test mode
-        process.stdin.resume();
-        return;
-      }
-
-      // Monitor parent process in MCP mode
-      if (process.ppid) {
-        const checkParent = () => {
-          try {
-            process.kill(process.ppid, 0);
-            setTimeout(checkParent, 1000);
-          } catch {
-            logger.info("Parent process ended, shutting down...");
-            this.cleanup();
-            process.exit(0);
-          }
-        };
-        setTimeout(checkParent, 1000);
-      }
-
-      // Handle stdin closure
-      process.stdin.on("close", () => {
-        logger.info("stdin closed, shutting down...");
-        this.cleanup();
-        process.exit(0);
-      });
-
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
-    } else {
+    if (!isMCPMode) {
       logger.warn(
         "This MCP server should be run from an MCP host such as Claude Code or Cursor.",
       );
-      logger.info("To test the UI directly, run: npm run dev");
-      logger.info("To test the MCP server directly, run with --test flag");
+      logger.info("To test the UI directly, run: npm run start:electron");
       process.exit(1);
     }
-  }
 
-  async cleanup() {
-    await this.stateMachine.transition(Event.SHUTDOWN_REQUESTED);
+    logger.info("Starting Mindpilot MCP server (lightweight mode)");
+
+    // Monitor parent process
+    if (process.ppid) {
+      const checkParent = () => {
+        try {
+          process.kill(process.ppid, 0);
+          setTimeout(checkParent, 1000);
+        } catch {
+          logger.info("Parent process ended, shutting down...");
+          process.exit(0);
+        }
+      };
+      setTimeout(checkParent, 1000);
+    }
+
+    // Handle stdin closure
+    process.stdin.on("close", () => {
+      logger.info("stdin closed, shutting down...");
+      process.exit(0);
+    });
+
+    // Connect to stdio transport
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+
+    logger.info("MCP server connected and ready");
   }
 }
 
-// Start the MCP client
-// Check if this file is being run directly (works with npm global installs)
+// Start the MCP server if run directly
 const isMainModule = () => {
   const currentFile = fileURLToPath(import.meta.url);
   const mainFile = process.argv[1];
@@ -624,50 +358,24 @@ if (isMainModule()) {
   setMaxListeners(20, process);
 
   const { parseArgs } = await import('node:util');
-  
+
   const { values } = parseArgs({
     options: {
-      port: {
-        type: 'string',
-        short: 'p',
-        default: '4000'
-      },
-      test: {
-        type: 'boolean',
-        default: false
-      },
-      debug: {
-        type: 'boolean',
-        default: false
-      },
-      'disable-analytics': {
-        type: 'boolean',
-        default: false
-      },
       'data-path': {
         type: 'string',
         default: undefined
       }
     }
   });
-  
-  const port = parseInt(values.port!, 10);
-  const client = new MindpilotMCPClient(port, values['disable-analytics'] as boolean, values['data-path'] as string | undefined);
+
+  const server = new MindpilotMCPServer(values['data-path'] as string | undefined);
 
   // Handle graceful shutdown
-  const shutdown = async () => {
-    await client.cleanup();
-    process.exit(0);
-  };
+  process.on("SIGINT", () => process.exit(0));
+  process.on("SIGTERM", () => process.exit(0));
 
-  process.on("SIGINT", () => shutdown());
-  process.on("SIGTERM", () => shutdown());
-  process.on("beforeExit", async () => {
-    await client.cleanup();
-  });
-
-  client.start({ test: values.test, debug: values.debug }).catch((error) => {
-    logger.error("Failed to start MCP client", { error });
+  server.start().catch((error) => {
+    logger.error("Failed to start MCP server", { error });
     process.exit(1);
   });
 }

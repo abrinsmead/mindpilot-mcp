@@ -1,0 +1,86 @@
+appId: com.mindpilot.app
+productName: Mindpilot
+copyright: Copyright © 2024 Alex Brinsmead
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+
+extraMetadata:
+  main: dist/electron/main.js
+
+# macOS configuration
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Windows configuration
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+
+# Linux configuration
+linux:
+  icon: build/icon.png
+  category: Development
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+    - target: rpm
+      arch:
+        - x64
+
+# Auto-update configuration
+publish:
+  provider: github
+  owner: abrinsmead
+  repo: mindpilot-mcp
+  releaseType: release
+
+# Asar archive
+asar: true
+asarUnpack:
+  - "**/*.node"
