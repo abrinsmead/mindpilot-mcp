@@ -58,16 +58,18 @@ export function createMainWindow(preloadPath: string, isDev: boolean, showOnRead
     title: 'Mindpilot',
     backgroundColor,
     show: false, // Don't show until ready
-    // macOS-specific: use native titlebar that respects system theme
-    titleBarStyle: process.platform === 'darwin' ? 'default' : undefined,
-    // Windows-specific: use dark title bar when in dark mode
+    // Platform-specific title bar configuration
+    ...(process.platform === 'darwin' && {
+      // macOS: use native titlebar that respects system theme
+      titleBarStyle: 'default',
+    }),
     ...(process.platform === 'win32' && {
-      titleBarOverlay: isDarkMode ? {
-        color: COLORS.dark.background,
-        symbolColor: '#ffffff',
-      } : {
-        color: COLORS.light.background,
-        symbolColor: '#000000',
+      // Windows: use hidden titlebar with overlay for themed window controls
+      titleBarStyle: 'hidden',
+      titleBarOverlay: {
+        color: backgroundColor,
+        symbolColor: isDarkMode ? '#ffffff' : '#000000',
+        height: 32,
       },
     }),
     webPreferences: {
@@ -92,6 +94,7 @@ export function createMainWindow(preloadPath: string, isDev: boolean, showOnRead
       mainWindow.setTitleBarOverlay({
         color: newBackgroundColor,
         symbolColor: newIsDarkMode ? '#ffffff' : '#000000',
+        height: 32,
       });
     }
   });

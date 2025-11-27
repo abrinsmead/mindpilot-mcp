@@ -11,6 +11,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import { useThemeContext } from '@/contexts';
+import { isWindows, isElectron } from '@/lib/electron';
 
 export interface AppLayoutProps {
   // History Panel
@@ -58,8 +59,24 @@ export function AppLayout({
 }: AppLayoutProps) {
   const { isDarkMode } = useThemeContext();
 
+  // Windows needs a custom titlebar region for window dragging
+  const showWindowsTitlebar = isElectron && isWindows;
+
   return (
     <div className={`h-screen w-screen flex flex-col ${isDarkMode ? "bg-neutral-900" : "bg-neutral-900"}`}>
+      {/* Windows titlebar drag region */}
+      {showWindowsTitlebar && (
+        <div
+          className={`titlebar-drag-region flex items-center justify-center h-8 shrink-0 ${
+            isDarkMode ? 'bg-[#1a1a2e]' : 'bg-white'
+          }`}
+          style={{ paddingRight: '138px' }} // Space for window controls (min/max/close buttons)
+        >
+          <span className={`text-xs font-medium select-none ${isDarkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
+            Mindpilot
+          </span>
+        </div>
+      )}
       <ResizablePanelGroup direction="horizontal" className="flex-1 relative">
         {/* History Panel - Left Side */}
         <ResizablePanel

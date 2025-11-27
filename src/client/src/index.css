@@ -58,3 +58,12 @@
   }
 }
 
+/* Windows title bar drag region */
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+

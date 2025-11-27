@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useLocalStorageBoolean } from '@/hooks/useLocalStorage';
+import { api, isElectron } from '@/lib/electron';
 
 export interface ThemeContextValue {
   isDarkMode: boolean;
@@ -16,12 +17,17 @@ export interface ThemeProviderProps {
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [isDarkMode, setIsDarkMode] = useLocalStorageBoolean('mindpilot-mcp-dark-mode', false);
 
-  // Apply dark mode class to document element
+  // Apply dark mode class to document element and sync with Electron native theme
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+    }
+
+    // Sync with Electron's native theme to update title bar
+    if (isElectron) {
+      api.setTheme(isDarkMode ? 'dark' : 'light');
     }
   }, [isDarkMode]);
 
