@@ -102,10 +102,17 @@ async function initialize(): Promise<void> {
 app.whenReady().then(initialize);
 
 app.on('window-all-closed', () => {
-  cleanupIPCHandlers();
+  // On macOS, apps typically stay running even when all windows are closed
+  // Only clean up handlers if we're actually quitting
   if (process.platform !== 'darwin') {
+    cleanupIPCHandlers();
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  // Clean up handlers when app is actually quitting (e.g., Cmd+Q on macOS)
+  cleanupIPCHandlers();
 });
 
 app.on('activate', () => {
