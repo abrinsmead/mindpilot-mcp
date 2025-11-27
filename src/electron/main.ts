@@ -150,9 +150,22 @@ if (!gotTheLock) {
     mainWindow.focus();
 
     // Check if the second instance was launched with --show-diagram
-    const showDiagramIndex = commandLine.indexOf('--show-diagram');
-    if (showDiagramIndex !== -1 && commandLine[showDiagramIndex + 1]) {
-      const diagramId = commandLine[showDiagramIndex + 1];
+    // Support both formats: --show-diagram <id> and --show-diagram=<id>
+    let diagramId: string | undefined;
+
+    // Check for --show-diagram=<id> format
+    const equalsArg = commandLine.find(arg => arg.startsWith('--show-diagram='));
+    if (equalsArg) {
+      diagramId = equalsArg.split('=')[1];
+    } else {
+      // Check for --show-diagram <id> format
+      const showDiagramIndex = commandLine.indexOf('--show-diagram');
+      if (showDiagramIndex !== -1 && commandLine[showDiagramIndex + 1]) {
+        diagramId = commandLine[showDiagramIndex + 1];
+      }
+    }
+
+    if (diagramId) {
       console.log(`[Main] Second instance requested diagram: ${diagramId}`);
 
       // Load and display the diagram

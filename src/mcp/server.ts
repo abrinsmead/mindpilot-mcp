@@ -233,6 +233,9 @@ export class MindpilotMCPServer {
   /**
    * Launch the Electron UI application
    * Optionally with a specific diagram ID to display
+   *
+   * If an instance is already running, the new process will trigger the
+   * 'second-instance' event on the existing instance and then exit.
    */
   private launchElectronUI(diagramId?: string) {
     try {
@@ -261,16 +264,32 @@ export class MindpilotMCPServer {
 
       logger.info('Using electron binary', { electronBin });
 
+      // Spawn Electron - if an instance is already running, this will trigger
+      // the 'second-instance' event on the existing instance and exit quickly.
+      // We use 'pipe' for stdio to capture any errors, but don't detach so
+      // we can ensure the single-instance handoff completes properly.
       const electronProcess = spawn(electronBin, args, {
         detached: true,
-        stdio: 'ignore',
+        stdio: ['ignore', 'ignore', 'pipe'], // Capture stderr for debugging
         env: {
           ...process.env,
           NODE_ENV: process.env.NODE_ENV || 'production',
         },
       });
 
-      electronProcess.unref();
+      // Log any errors from the spawned process
+      electronProcess.stderr?.on('data', (data: Buffer) => {
+        const msg = data.toString().trim();
+        if (msg) {
+          logger.warn('Electron stderr', { message: msg });
+        }
+      });
+
+      // Wait a brief moment before unref to ensure single-instance handoff completes
+      setTimeout(() => {
+        electronProcess.unref();
+      }, 500);
+
     } catch (error) {
       logger.error('Failed to launch Electron UI', { error });
     }
