@@ -53,16 +53,34 @@ export function DiagramItem({
 }: DiagramItemProps) {
   const inlineEditRef = useRef<InlineEditRef>(null);
   const itemRef = useRef<HTMLDivElement>(null);
+  const hasScrolledOnMount = useRef(false);
 
-  // Scroll into view when active and shouldScrollIntoView is true
+  // Scroll into view when:
+  // 1. shouldScrollIntoView becomes true while active
+  // 2. Component mounts while active (handles collection expansion after scroll trigger)
   useEffect(() => {
-    if (isActive && shouldScrollIntoView && itemRef.current) {
-      itemRef.current.scrollIntoView({
-        behavior: 'instant',
-        block: 'center',
-      });
+    if (isActive && itemRef.current) {
+      // Scroll if explicitly requested OR if this is the first render while active
+      if (shouldScrollIntoView || !hasScrolledOnMount.current) {
+        hasScrolledOnMount.current = true;
+        // Small delay to ensure DOM has settled after collection expansion
+        requestAnimationFrame(() => {
+          itemRef.current?.scrollIntoView({
+            behavior: 'instant',
+            block: 'center',
+          });
+        });
+      }
     }
   }, [isActive, shouldScrollIntoView]);
+
+  // Reset the mount scroll flag when this item becomes inactive
+  // so it will scroll again if it becomes active later
+  useEffect(() => {
+    if (!isActive) {
+      hasScrolledOnMount.current = false;
+    }
+  }, [isActive]);
 
   const handleRename = () => {
     inlineEditRef.current?.startEditing();
