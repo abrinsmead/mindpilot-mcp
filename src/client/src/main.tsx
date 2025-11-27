@@ -4,6 +4,7 @@ import { App } from './App.tsx'
 import { ErrorBoundary } from './components/common'
 import { AppProviders } from './contexts'
 import { PostHogProvider } from 'posthog-js/react'
+import { api } from '@/lib/electron'
 import './index.css'
 
 const posthogOptions = {
@@ -26,8 +27,7 @@ const RootApp = () => {
 
   useEffect(() => {
     // Fetch server status to check if analytics is disabled
-    fetch('/api/status')
-      .then(res => res.json())
+    api.getStatus()
       .then(data => {
         setAnalyticsDisabled(data.disableAnalytics || false)
       })

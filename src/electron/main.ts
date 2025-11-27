@@ -49,13 +49,13 @@ function parseArgs(): { dataPath?: string; disableAnalytics: boolean } {
 }
 
 async function initialize(): Promise<void> {
-  const { dataPath } = parseArgs();
+  const { dataPath, disableAnalytics } = parseArgs();
 
   // Create embedded MCP server (shares HistoryService with IPC handlers)
   mcpServer = new EmbeddedMCPServer(dataPath);
 
   // Initialize IPC handlers with the same HistoryService
-  initializeIPCHandlers(dataPath, mcpServer.getHistoryService());
+  initializeIPCHandlers(dataPath, mcpServer.getHistoryService(), { disableAnalytics });
 
   // Set up diagram update handler - sends to renderer when MCP receives a diagram
   mcpServer.setDiagramUpdateHandler((diagram, title, id) => {

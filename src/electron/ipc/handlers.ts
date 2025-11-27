@@ -12,10 +12,12 @@ import { detectGitRepo } from '../../shared/gitRepoDetector.js';
 import { DiagramHistoryEntry } from '../../shared/types.js';
 
 let historyService: HistoryService;
+let disableAnalytics = false;
 
-export function initializeIPCHandlers(dataPath?: string, sharedHistoryService?: HistoryService): void {
+export function initializeIPCHandlers(dataPath?: string, sharedHistoryService?: HistoryService, options?: { disableAnalytics?: boolean }): void {
   // Use shared HistoryService if provided (e.g., from MCP server), otherwise create new one
   historyService = sharedHistoryService || new HistoryService(dataPath);
+  disableAnalytics = options?.disableAnalytics ?? false;
 
   // Diagram operations
   ipcMain.handle(IPC_CHANNELS.DIAGRAM_RENDER, async (_event, diagram: string, background?: string, workingDir?: string, title?: string) => {
@@ -79,6 +81,7 @@ export function initializeIPCHandlers(dataPath?: string, sharedHistoryService?: 
       serverRunning: true,
       isElectron: true,
       uptime: Math.floor(process.uptime()),
+      disableAnalytics,
     };
   });
 
