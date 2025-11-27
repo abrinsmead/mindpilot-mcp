@@ -38,10 +38,18 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Pre-bundle mermaid and its dynamic imports to avoid issues in Electron
+  optimizeDeps: {
+    include: ['mermaid'],
+  },
   build: {
     outDir: '../../dist/public',
     emptyOutDir: true,
+    // Use relative paths for Electron file:// loading
+    base: isElectron ? './' : '/',
   },
+  // Use relative base in Electron mode
+  base: isElectron ? './' : '/',
   server: {
     port: 5173,
     proxy: {
