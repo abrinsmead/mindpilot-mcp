@@ -243,6 +243,15 @@ export const api = {
     window.addEventListener('focus', callback);
     return () => window.removeEventListener('focus', callback);
   },
+
+  onWindowBlur(callback: () => void): () => void {
+    if (electronAPI?.onWindowBlur) {
+      return electronAPI.onWindowBlur(callback);
+    }
+    // In browser mode, use native blur event
+    window.addEventListener('blur', callback);
+    return () => window.removeEventListener('blur', callback);
+  },
 };
 
 // Re-export types

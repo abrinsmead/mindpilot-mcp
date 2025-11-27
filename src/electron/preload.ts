@@ -56,6 +56,7 @@ export interface ElectronAPI {
 
   // Window event listeners
   onWindowFocus: (callback: () => void) => () => void;
+  onWindowBlur: (callback: () => void) => () => void;
 
   // Platform info
   platform: NodeJS.Platform;
@@ -131,6 +132,11 @@ const electronAPI: ElectronAPI = {
     const handler = () => callback();
     ipcRenderer.on(IPC_CHANNELS.WINDOW_FOCUS, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_FOCUS, handler);
+  },
+  onWindowBlur: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_BLUR, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_BLUR, handler);
   },
 
   // Platform info

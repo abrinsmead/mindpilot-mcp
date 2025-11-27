@@ -7,6 +7,7 @@ import { ZoomControls, HotkeyModal, AppLayout } from "@/components/layout";
 import { DiagramRenderer, PanZoomContainer, DiagramTitle, MermaidEditor, MermaidEditorHandle, DrawingCanvas } from "@/components/diagram";
 import { useLocalStorageBoolean, useLocalStorageNumber } from "@/hooks/useLocalStorage";
 import { useKeyboardShortcuts, usePreventBrowserZoom, KeyboardShortcut } from "@/hooks/useKeyboardShortcuts";
+import { useWindowActive } from "@/hooks/useWindowActive";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useFeatureFlag } from "@/hooks/useQueryParam";
@@ -21,6 +22,7 @@ export function App() {
   const { trackThemeChanged, trackPanelToggled } = useAnalytics();
   const isPenToolEnabled = useFeatureFlag('xMarker'); // Pen tool enabled with ?xMarker=1
   const { copyImageToClipboard } = useExportDiagram({ isDarkMode });
+  const isWindowActive = useWindowActive();
 
   // LocalStorage-backed state for UI preferences
   const [isEditCollapsed, setIsEditCollapsed] = useLocalStorageBoolean("mindpilot-mcp-edit-collapsed", true);
@@ -270,7 +272,7 @@ export function App() {
     }
   }, [diagram]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts - only active when window is focused
   const shortcuts = useMemo<KeyboardShortcut[]>(() => {
     const baseShortcuts: KeyboardShortcut[] = [
       // Prevent Ctrl/Cmd+A from selecting all page elements (except in Monaco editor)
@@ -279,7 +281,7 @@ export function App() {
         ctrl: true,
         description: 'Select all (editor only)',
         preventDefault: true,
-        isEnabled: () => !isEditorFocused, // Only prevent when editor is NOT focused
+        isEnabled: () => isWindowActive && !isEditorFocused, // Only prevent when editor is NOT focused
         handler: () => {
           // Do nothing - just prevent the default browser select all
         }
@@ -289,7 +291,7 @@ export function App() {
         key: '/',
         description: 'Focus search bar',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => {
           historyPanelMethodsRef.current?.focusSearch();
         }
@@ -299,7 +301,7 @@ export function App() {
         key: 'd',
         description: 'Toggle dark/light mode',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => {
           toggleTheme();
           trackThemeChanged({ theme: isDarkMode ? 'light' : 'dark' });
@@ -310,7 +312,7 @@ export function App() {
         key: 'h',
         description: 'Toggle history panel',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => {
           if (isHistoryCollapsed) {
             historyPanelRef.current?.expand();
@@ -323,7 +325,7 @@ export function App() {
         key: 'e',
         description: 'Toggle editor panel',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => {
           if (isEditCollapsed) {
             editPanelRef.current?.expand();
@@ -338,7 +340,7 @@ export function App() {
         description: 'Copy image to clipboard',
         ignoreInputElements: true,
         preventDefault: true,
-        isEnabled: () => !isEditorFocused && !isRenaming && !!diagram,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming && !!diagram,
         handler: () => handleCopyImage()
       },
       {
@@ -346,7 +348,7 @@ export function App() {
         description: 'Copy source to clipboard',
         ignoreInputElements: true,
         preventDefault: true,
-        isEnabled: () => !isEditorFocused && !isRenaming && !!diagram,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming && !!diagram,
         handler: () => handleCopySource()
       },
       // Zoom controls
@@ -354,21 +356,21 @@ export function App() {
         key: 'ArrowUp',
         description: 'Zoom in',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => handleZoomIn()
       },
       {
         key: 'ArrowDown',
         description: 'Zoom out',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => handleZoomOut()
       },
       {
         key: 'f',
         description: 'Fit to screen',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => handleFitToScreen()
       },
       // Drawing (only if feature flag is enabled)
@@ -376,7 +378,7 @@ export function App() {
         key: 'p',
         description: 'Toggle pen/drawing mode',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => setIsDrawingMode(!isDrawingMode)
       }] : []),
       // Navigation
@@ -385,7 +387,7 @@ export function App() {
         ctrl: true,
         description: 'Previous diagram',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => navigateToPreviousDiagram()
       },
       {
@@ -393,7 +395,7 @@ export function App() {
         ctrl: true,
         description: 'Next diagram',
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => navigateToNextDiagram()
       },
       // Help
@@ -401,17 +403,18 @@ export function App() {
         key: '?',
         description: 'Show keyboard shortcuts',
         caseSensitive: true,
+        isEnabled: () => isWindowActive,
         handler: () => setShowHotkeyModal(prev => !prev)
       }
     ];
-    
+
     // Add 1-9 shortcuts for jumping to nth diagram in expanded groups
     for (let i = 1; i <= 9; i++) {
       baseShortcuts.push({
         key: String(i),
         description: `Jump to diagram ${i} in expanded group`,
         ignoreInputElements: true,
-        isEnabled: () => !isEditorFocused && !isRenaming && !isHistoryCollapsed,
+        isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming && !isHistoryCollapsed,
         handler: () => {
           const diagramId = historyPanelMethodsRef.current?.getNthDiagramInExpandedGroups(i);
           if (diagramId) {
@@ -420,9 +423,9 @@ export function App() {
         }
       });
     }
-    
+
     return baseShortcuts;
-  }, [isHistoryCollapsed, isEditCollapsed, isEditorFocused, isRenaming, isDarkMode, toggleTheme, trackThemeChanged, navigateToNextDiagram, navigateToPreviousDiagram, isPenToolEnabled, isDrawingMode, handleSelectDiagram, diagram, handleCopyImage, handleCopySource]);
+  }, [isWindowActive, isHistoryCollapsed, isEditCollapsed, isEditorFocused, isRenaming, isDarkMode, toggleTheme, trackThemeChanged, navigateToNextDiagram, navigateToPreviousDiagram, isPenToolEnabled, isDrawingMode, handleSelectDiagram, diagram, handleCopyImage, handleCopySource]);
 
   useKeyboardShortcuts(shortcuts);
   usePreventBrowserZoom();

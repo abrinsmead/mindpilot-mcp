@@ -129,6 +129,16 @@ export function createMainWindow(preloadPath: string, isDev: boolean, showOnRead
     mainWindow?.webContents.send(IPC_CHANNELS.WINDOW_FOCUS);
   });
 
+  // Notify renderer when window loses focus (for disabling hotkeys)
+  mainWindow.on('blur', () => {
+    mainWindow?.webContents.send(IPC_CHANNELS.WINDOW_BLUR);
+  });
+
+  // Also notify when window is hidden
+  mainWindow.on('hide', () => {
+    mainWindow?.webContents.send(IPC_CHANNELS.WINDOW_BLUR);
+  });
+
   // Load the app
   if (isDev) {
     // Development: load from Vite dev server
