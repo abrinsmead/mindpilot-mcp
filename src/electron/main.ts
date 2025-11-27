@@ -23,8 +23,16 @@ const __dirname = path.dirname(__filename);
 // Check if running in development mode
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-// Check if launched by MCP host (stdin is piped, not a TTY)
-const isMCPMode = !process.stdin.isTTY;
+// Check if launched by MCP host
+// Either via --mcp flag (explicit) or stdin is piped (implicit)
+const isMCPMode = process.argv.includes('--mcp') || !process.stdin.isTTY;
+
+console.log('[Main] Launch mode:', {
+  isMCPMode,
+  hasFlag: process.argv.includes('--mcp'),
+  stdinIsTTY: process.stdin.isTTY,
+  argv: process.argv
+});
 
 // Global reference to MCP server
 let mcpServer: EmbeddedMCPServer | null = null;
