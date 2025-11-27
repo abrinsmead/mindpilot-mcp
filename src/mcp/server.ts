@@ -253,8 +253,13 @@ export class MindpilotMCPServer {
 
       logger.info('Launching Electron UI', { diagramId, electronMainPath });
 
-      // Use electron to launch the app
-      const electronBin = process.platform === 'win32' ? 'electron.cmd' : 'electron';
+      // Find the electron binary - it's in node_modules/.bin relative to the package root
+      // __dirname is dist/mcp, so we go up two levels to get to the package root
+      const packageRoot = path.resolve(__dirname, '../..');
+      const electronBinName = process.platform === 'win32' ? 'electron.cmd' : 'electron';
+      const electronBin = path.join(packageRoot, 'node_modules', '.bin', electronBinName);
+
+      logger.info('Using electron binary', { electronBin });
 
       const electronProcess = spawn(electronBin, args, {
         detached: true,
