@@ -4,3 +4,4 @@ export * from './usePanZoom';
 export * from './useExportDiagram';
 export * from './useDiagramHistory';
 export * from './useAnalytics';
+export * from './useWindowActive';

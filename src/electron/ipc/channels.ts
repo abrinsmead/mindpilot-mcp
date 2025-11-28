@@ -41,6 +41,7 @@ export const IPC_CHANNELS = {
 
   // Window events (main -> renderer)
   WINDOW_FOCUS: 'window:focus',
+  WINDOW_BLUR: 'window:blur',
 } as const;
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];
