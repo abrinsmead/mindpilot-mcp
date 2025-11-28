@@ -293,7 +293,15 @@ export function App() {
         ignoreInputElements: true,
         isEnabled: () => isWindowActive && !isEditorFocused && !isRenaming,
         handler: () => {
-          historyPanelMethodsRef.current?.focusSearch();
+          if (isHistoryCollapsed) {
+            historyPanelRef.current?.expand();
+            // Small delay to allow panel to expand before focusing search
+            setTimeout(() => {
+              historyPanelMethodsRef.current?.focusSearch();
+            }, 50);
+          } else {
+            historyPanelMethodsRef.current?.focusSearch();
+          }
         }
       },
       // Mode toggle
