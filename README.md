@@ -170,3 +170,8 @@ Start the development client (Vite) to get hot module reloading while developing
 
 Open the development client
 `localhost:5173`
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/abrinsmead-mindpilot-mcp).
+
