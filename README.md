@@ -5,6 +5,11 @@
 
 See through your agent's eyes. Visualize legacy code, inspect complex flows, understand everything.
 
+> [!TIP]
+> Mindpilot's core functionality is now available as a lightweight [agent skill](https://github.com/abrinsmead/skills/tree/main/mermaid-viewer)—no local server needed. It generates a self-contained, interactive Mermaid viewer. It can generate the diagrams as Claude artifacts too.
+>
+> Install with: `npx skills add abrinsmead/skills/mermaid-viewer`
+
 ![Screenshot](https://raw.githubusercontent.com/abrinsmead/mindpilot-mcp/main/mindpilot-mcp-latest.png)
 
 ## Why Mindpilot?
